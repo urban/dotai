@@ -1,7 +1,7 @@
 ---
 name: dotai-technical-design
 created_at: 2026-04-07T22:19:23Z
-updated_at: 2026-04-09T18:35:14Z
+updated_at: 2026-04-10T16:40:00Z
 generated_by:
   root_skill: specification-authoring
   producing_skill: technical-design
@@ -39,7 +39,7 @@ source_artifacts:
 ## Architecture Summary
 
 - Runtime profile: CLI-only Bun application authored in TypeScript and structured as an Effect application.
-- Composition root: `src/cli/main.ts` as the package bin entry, assembling one `MainLayer` plus the nested `dotai skills` command tree and running it through the Effect Bun runtime via `BunRuntime.runMain` from `@effect/platform-bun`.
+- Composition root: `src/cli/main.ts` as the package bin entry, assembling the nested `dotai skills` command tree with `effect/unstable/cli`, providing `MainLayer` together with `BunServices.layer`, and running the final Effect with `BunRuntime.runMain` from `@effect/platform-bun`.
 - Main execution model: One-shot command execution that decodes command input, resolves the target and any explicit source, computes a complete plan, applies filesystem mutations only after validation succeeds, rewrites the lock file atomically, and renders a human-readable summary or failure.
 - Summary: `dotai` is designed as thin CLI runtime edges over a small set of gray-box capability services: target-path resolution, source normalization and staging, skill catalog discovery, dependency planning, mutation execution, and lock-file persistence. All remote sources normalize to git-backed locators with optional `ref` and `subpath`, operator-facing discovery hides `metadata.internal: true` skills, dependency resolution expands same-source names plus URL locators before mutation, and command workflows preserve target plus lock-file consistency through same-device staging, atomic replace, and best-effort rollback.
 
@@ -147,10 +147,10 @@ The command lifecycle is intentionally plan-first. All dependency expansion, sou
 
 The CLI Runtime Edge turns parsed terminal commands into explicit workflow calls and turns workflow results back into consistent user-facing output.
 
-- Boundary type: runtime edge module built with `effect/unstable/cli`.
+- Boundary type: runtime edge module built with `effect/unstable/cli` and finalized with `Command.run`.
 - Owned capability: Decode the nested `dotai skills` command surface, resolve flags and positional arguments, trigger interactive fallback selection when names are omitted, and render operator-facing summaries plus failures.
 - Hidden depth: Command-specific prompt wiring, argument decoding, exit-code mapping, and display formatting remain inside the edge instead of leaking into deeper services.
-- Inputs: `process.argv`, environment, standard input and output, current working directory, and approved command grammar from TC3.7.
+- Inputs: parsed command input from `Command.run`, environment, terminal and stdio services from `BunServices.layer`, current working directory lookup for local targets, and approved command grammar from TC3.7.
 - Outputs: Calls into `SkillWorkflows`, then renders one consistent operator-facing result layout per command: summary, summary-with-warnings, blocked, failure, or no-op, plus process exit success or failure.
 - Story impact: Supports all stories, especially target selection, discovery, install selection, uninstall safety, and update reporting.
 
@@ -322,8 +322,8 @@ export const LocalSource = Schema.TaggedStruct("LocalSource", {
 
 export const GitSource = Schema.TaggedStruct("GitSource", {
   URL: Schema.String,
-  ref: Schema.optional(Schema.String),
-  subpath: Schema.optional(Schema.String),
+  ref: Schema.optionalKey(Schema.String),
+  subpath: Schema.optionalKey(Schema.String),
 });
 
 export const NormalizedSource = Schema.Union(LocalSource, GitSource);
@@ -335,8 +335,8 @@ export const LocalSourceRecord = Schema.Struct({
 
 export const GitSourceRecord = Schema.Struct({
   URL: Schema.String,
-  ref: Schema.optional(Schema.String),
-  subpath: Schema.optional(Schema.String),
+  ref: Schema.optionalKey(Schema.String),
+  subpath: Schema.optionalKey(Schema.String),
 });
 
 export const SourceRecord = Schema.Union(LocalSourceRecord, GitSourceRecord);
@@ -344,7 +344,7 @@ export const SourceRecord = Schema.Union(LocalSourceRecord, GitSourceRecord);
 export const LockEntry = Schema.Struct({
   source: SourceRecord,
   requiredBy: Schema.Array(Schema.String),
-  implicit: Schema.optional(Schema.Literal(true)),
+  implicit: Schema.optionalKey(Schema.Literal(true)),
 });
 export type LockEntry = Schema.Schema.Type<typeof LockEntry>;
 
@@ -404,7 +404,7 @@ Representative persisted lock file:
 }
 ```
 
-Use tagged unions for in-memory normalized sources so planning branches stay total and illegal states stay unrepresentable, then persist only the field-level `source` record required by the lock-file contract.
+Use tagged unions for in-memory normalized sources so planning branches stay total and illegal states stay unrepresentable, then persist only the field-level `source` record required by the lock-file contract. For v4-native schema authoring, use `Schema.optionalKey(...)` for lock-file and DTO fields that must be omitted when absent; reserve `Schema.optional(...)` for boundaries that intentionally accept explicit `undefined`.
 
 - Flow: CLI input becomes typed command arguments at the runtime edge. `TargetPaths` resolves the target. For `discover`, `install`, and remote dependency resolution, `SourceWorkspace` normalizes and materializes one or more sources. `SkillCatalog` reads manifests from the source workspace or installed target. `DependencyPlanner` computes the full operation graph and next lock-file state. `MutationExecutor` applies file changes in a same-device staging area, and `LockfileStore` atomically replaces the lock file only after mutation succeeds.
 - Observation support: Operator-visible output is derived from `WorkflowResult` values that summarize selected roots, auto-installed dependencies, updated skills, blockers, and final lock-file state transitions.
@@ -471,8 +471,8 @@ import { Schema } from "effect";
 
 export const RenderContext = Schema.Struct({
   target: Schema.String,
-  source: Schema.optional(Schema.String),
-  lockfile: Schema.optional(Schema.String),
+  source: Schema.optionalKey(Schema.String),
+  lockfile: Schema.optionalKey(Schema.String),
 });
 
 export const RenderSection = Schema.Struct({
@@ -676,7 +676,7 @@ This design intentionally treats mutation plus lock-file write as one commit bou
 ## Implementation Strategy
 
 - Recomposition sites:
-  - `src/cli/main.ts` constructs the `Command` tree and provides one `MainLayer`.
+  - `src/cli/main.ts` constructs the `Command` tree, runs `Command.run(...)`, and provides `MainLayer` together with `BunServices.layer` before handing the final program to `BunRuntime.runMain`.
   - Each capability service is expressed as a `Context.Service` with its own static layer or factory layer.
   - `SkillWorkflows` is the only feature orchestration layer that composes the lower-level services into user-visible commands.
   - Runtime-edge command handlers decode inputs and delegate; they do not `provide` ad hoc layers beyond final command wiring.
@@ -685,9 +685,9 @@ This design intentionally treats mutation plus lock-file write as one commit bou
   - `MutationExecutor` owns same-device staging directories, replaced-directory backups, and rollback cleanup.
   - `LockfileStore` owns adjacent temp-file writes for atomic lock-file replacement.
 - Direct runtime escape hatches:
-  - Bun runtime filesystem APIs, using the Bun-supported filesystem surface that provides the safest atomic rename and copy semantics
-  - OS path and home-directory APIs
-  - direct child-process execution of the system `git` executable from the Bun runtime
+  - prefer the platform services supplied by `BunServices.layer`, especially `FileSystem`, `Path`, `Terminal`, `Stdio`, and `ChildProcessSpawner`
+  - run `git` through the `effect/unstable/process` modules and `ChildProcessSpawner` rather than shelling out through ad hoc Bun APIs
+  - use direct Bun or OS filesystem calls only where the platform service surface cannot provide the required same-device atomic rename or copy semantics
   - JSON parse and stringify for lock-file persistence
 - Strategy: Build the system bottom-up from canonical domain contracts and tagged errors, then add source normalization and staging, then catalog discovery and dependency planning, then mutation plus lock persistence, and finally the CLI edge and interactive selection layer. Keep runtime assembly visible in one place and keep all external IO behind narrow capability contracts.
 
@@ -695,31 +695,42 @@ Two additional implementation choices keep the design coherent:
 
 - Use plain `Schema` contracts for lock-file JSON, source locators, manifest frontmatter DTOs, and command-edge parsing where structural validation matters.
 - Reserve `Schema.Class` only for domain contracts that need shared meaning beyond structural validation; the v1 design does not require class-backed contracts as the default.
+- Implement service methods with `Effect.fn("Service.method")` plus `Effect.gen` so tracing names, stack traces, and control flow follow current Effect v4 guidance.
 
 ## Testing Strategy
 
-- Unit and contract tests:
+- Tooling and runtime:
+  - Vitest is the only automated test runner for `dotai`; the repository `test` script should invoke `vitest run`, not `bun test`.
+  - `@effect/vitest` is the default test interface for Effect-native coverage, using `describe`, `it`, `expect`, `assert`, and `layer` from that package instead of mixing plain Vitest helpers with ad hoc Effect runners.
+- Effect-native unit and service contract tests:
   - source-locator normalization for local paths, shorthands, repository URLs, tree URLs, refs, and subpaths
   - manifest visibility rules for `metadata.internal: true`
   - lock-file encode and decode behavior plus `implicit` omission rules
   - dependency graph expansion, cycle detection, and `requiredBy` derivation
   - selective-update closure versus full-update closure
+  - test `Context.Service` boundaries through their public contracts with `it.effect` plus shared test layers or `Effect.provide`, not by reaching into private helpers
+  - assert typed failures by tag and shape, or by `Exit`, rather than by brittle string-only matching
+  - use `TestClock` when time-sensitive behavior is introduced so retries, delays, or scoped cleanup stay deterministic
 - Integration tests with temp filesystems:
   - local-target and global-target path resolution
   - install, uninstall, and update against fixture skill repositories
   - rollback behavior when copy, rename, or lock-file writes fail mid-command
   - discovery and install behavior when source roots include hidden internal helper skills
+  - use `it.live` or `it.scopedLive` when tests need real filesystem, child-process, or git behavior
+  - inject copy, rename, and lock-write failure scenarios through test doubles at service boundaries so rollback guarantees are verified without coupling tests to internal choreography
 - Git-backed integration tests:
   - create local bare repositories to simulate remote git hosts without external network dependence
   - verify shorthand normalization, branch checkout, and subpath narrowing
   - verify URL-based dependencies that point to distinct sources
 - CLI tests:
   - positional-argument flows
-  - interactive fallback flows with prompt stubs when names are omitted
+  - interactive fallback flows with prompt-adapter stubs when names are omitted
   - clear blocker and failure rendering for cycles, missing dependencies, blocked uninstalls, and missing provenance
+  - renderer tests should assert both structured `WorkflowResult` values and final rendered text under Vitest rather than relying on Bun Test Runner-specific behavior
 - Verification focus:
   - operator-visible command grammar and output
   - renderer contract ordering for headline, context, primary result, warnings or secondary sections, and mutation-status footer
+  - shared test layers that keep capability-boundary tests resilient to internal refactors
   - zero mutation on pre-commit failures
   - committed lock state matching committed filesystem state
   - direct versus implicit install semantics and `requiredBy` transitions
