@@ -1,7 +1,7 @@
 ---
 name: dotai-execution-tasks
 created_at: 2026-04-10T14:39:34Z
-updated_at: 2026-04-10T14:39:34Z
+updated_at: 2026-04-10T16:55:00Z
 generated_by:
   root_skill: specification-to-execution
   producing_skill: task-generation
@@ -30,7 +30,7 @@ source_artifacts:
 - Parent plan: .specs/dotai/execution-plan.md
 - Scope: Implement the approved `dotai` CLI from the current greenfield repository baseline across read-only discovery, install and lock-file lifecycle management, safe uninstall and update workflows, and the shared operator-facing runtime edge.
 - Tracking intent: Use these grouped tracer-bullet tasks to land thin end-to-end behaviors in plan order, update status as slices ship, and keep every implementation turn tied back to the execution plan rather than expanding scope ad hoc.
-- Story / requirement / design anchors: Capability areas Target Selection and Discovery, Installation and Dependency Resolution, Lock File and Lifecycle State, and Removal and Refresh; story titles from `.specs/dotai/user-stories.md` because canonical `US1.x` IDs are not yet present; FR1.1-FR1.19, NFR2.1-NFR2.5, TC3.1-TC3.10, DR4.1-DR4.15; CLI Runtime Edge, SkillWorkflows, TargetPaths, SourceWorkspace, SkillCatalog, DependencyPlanner, MutationExecutor, LockfileStore, Failure and Recovery Strategy, and Testing Strategy.
+- Story / requirement / design anchors: Capability areas Target Selection and Discovery, Installation and Dependency Resolution, Lock File and Lifecycle State, and Removal and Refresh; story titles from `.specs/dotai/user-stories.md` because canonical `US1.x` IDs are not yet present; FR1.1-FR1.19, NFR2.1-NFR2.5, TC3.1-TC3.10, DR4.1-DR4.15; CLI Runtime Edge (`effect/unstable/cli`, `Command.run`, `BunServices.layer`, `BunRuntime.runMain`), SkillWorkflows, TargetPaths, SourceWorkspace, SkillCatalog, DependencyPlanner, MutationExecutor, LockfileStore, Failure and Recovery Strategy, and Testing Strategy.
 - Runtime-edge obligations: Preserve the nested `dotai skills` grammar, resolved target and source context, prompt fallback when names are omitted, and explicit summary, warning, blocked, failure, and no-op rendering, including `No files or lock file were changed.` when planning blocks mutation.
 
 ## Stream Groups
@@ -45,12 +45,12 @@ Objective: Establish the reusable read path for target resolution, source stagin
 - Status: Not started
 - Blocked by: None
 - Plan references:
-  - Execution plan / Inventory and Source Discovery / Establish the command and service skeleton for `dotai skills list`, including `MainLayer`, workflow entrypoints, target-path resolution, and installed-skill inventory rendering for local and global targets.
+  - Execution plan / Inventory and Source Discovery / Establish the command and service skeleton for `dotai skills list`, including the `effect/unstable/cli` command tree, `Command.run(...)`, `MainLayer`, `BunServices.layer`, workflow entrypoints, target-path resolution, and installed-skill inventory rendering for local and global targets.
   - FR1.1-FR1.2; TC3.1-TC3.2, TC3.7; CLI Runtime Edge; SkillWorkflows; TargetPaths; SkillCatalog
-- What to build: A first end-to-end read-only command path that decodes `dotai skills list [--global]`, resolves the correct target, reads installed skills from `.agents/skills`, and renders the approved inventory summary.
+- What to build: A first end-to-end read-only command path that decodes `dotai skills list [--global]`, resolves the correct target, reads installed skills from `.agents/skills`, and renders the approved inventory summary through the approved Effect v4 CLI composition root.
 - Acceptance criteria:
-  - The CLI exposes `dotai skills list [--global]` and routes it through the runtime edge into a workflow that resolves local and global target paths.
-  - Temp-fixture verification proves the command renders installed skill names plus explicit target context without mutating files or requiring a lock file.
+  - The CLI exposes `dotai skills list [--global]`, builds the command tree with `effect/unstable/cli`, reaches execution through `Command.run(...)`, and routes into a workflow that resolves local and global target paths.
+  - Temp-fixture verification proves the command renders installed skill names plus explicit target context without mutating files or requiring a lock file, and the entrypoint provides `MainLayer` together with `BunServices.layer` before `BunRuntime.runMain`.
 - Notes:
   - This is the first production tracer bullet and should establish the shared result-layout baseline for later workflows.
 
@@ -64,7 +64,7 @@ Objective: Establish the reusable read path for target resolution, source stagin
   - FR1.3-FR1.4; TC3.3-TC3.9; DR4.1, DR4.10-DR4.11; SourceWorkspace; SkillCatalog
 - What to build: A discover command that accepts supported local and git-backed source locators, stages the source, parses `SKILL.md` manifests, and renders only operator-visible skills.
 - Acceptance criteria:
-  - Local-path and git-backed fixture sources normalize into staged workspaces that the command can inspect without changing the target skills directory.
+  - Local-path and git-backed fixture sources normalize into staged workspaces that the command can inspect without changing the target skills directory, and git-backed staging runs through `ChildProcessSpawner` from `BunServices.layer` rather than ad hoc shell wiring.
   - Discovery output omits skills with `metadata.internal: true` while the underlying planner-facing catalog view still retains those skills for future dependency resolution.
 - Notes:
   - Reuse the list renderer context so discover output already includes target and source details in the approved order.
@@ -98,7 +98,7 @@ Objective: Deliver install and add workflows that expand dependencies, mutate th
   - FR1.6, FR1.10-FR1.11; DR4.2-DR4.6, DR4.12-DR4.15; MutationExecutor; LockfileStore
 - What to build: The smallest production-bound install path that takes one requested skill from a discovered source, copies it into the resolved target, writes the correct lock file, and renders an install summary.
 - Acceptance criteria:
-  - `dotai skills install SOURCE SKILL-NAME` copies the selected skill into the resolved target `.agents/skills` directory, writes the correct local or global lock file, and records the skill as a direct install.
+  - `dotai skills install SOURCE SKILL-NAME` copies the selected skill into the resolved target `.agents/skills` directory, writes the correct local or global lock file, records the skill as a direct install, and omits optional lock-file fields with `Schema.optionalKey(...)` semantics instead of writing `undefined`.
   - The command summary shows target, source, installed skill, and lock-file context, and simulated lock-write failure proves the copied skill is rolled back before success is reported.
 - Notes:
   - Start with the direct-install happy path before widening dependency behavior.
@@ -248,18 +248,18 @@ Objective: Finish prompt flows, shared rendering, and automated verification so 
 
 #### Task DOTAI-014
 
-- Title: Replace placeholder verification with automated unit, integration, and CLI coverage
+- Title: Replace placeholder verification with Vitest and `@effect/vitest` automated coverage
 - Status: Not started
 - Blocked by: DOTAI-011, DOTAI-012, DOTAI-013
 - Plan references:
-  - Execution plan / CLI UX Hardening and Verification / Add automated unit, integration, git-fixture, and CLI tests that cover path resolution, source normalization, dependency planning, rollback, prompt flows, and renderer output, then keep `bun run check` green.
+  - Execution plan / CLI UX Hardening and Verification / Add automated unit, integration, git-fixture, and CLI tests with Vitest plus `@effect/vitest`, covering path resolution, source normalization, dependency planning, rollback, prompt flows, and renderer output, then keep `bun run check` green.
   - NFR2.4; TC3.10; DEP6.2-DEP6.5; Testing Strategy
-- What to build: A real automated test suite and repository validation path that prove the CLI behavior, dependency safety, and rollback guarantees instead of relying on manual checks.
+- What to build: A Vitest plus `@effect/vitest` test harness and suite that prove the CLI behavior, dependency safety, and rollback guarantees instead of relying on manual checks or the Bun Test Runner.
 - Acceptance criteria:
-  - The repository replaces the placeholder test behavior with automated coverage for target resolution, source normalization, install or uninstall or update planning, rollback, prompt flows, and renderer output.
-  - `bun run check` passes against the new verification matrix and becomes a meaningful completion gate for ongoing `dotai` implementation work.
+  - The repository adds Vitest plus `@effect/vitest`, wires `bun run test` to `vitest run`, and provides shared Effect-native test helpers for `it.effect`, `it.live`, shared `layer(...)` setup, prompt stubs, and failure-injection fixtures where those seams are needed.
+  - The automated suite covers target resolution, source normalization, install or uninstall or update planning, rollback, prompt flows, and renderer output, and `bun run check` passes without introducing any Bun Test Runner-based tests.
 - Notes:
-  - TODO: Confirm the final test runner and prompt-test harness before starting this task, because the repository currently has only a placeholder test script.
+  - Use `it.effect` for service and planner contract tests, `Effect.provide` or shared test layers for boundary wiring, and `it.live` or `it.scopedLive` for real filesystem, git, and CLI integration flows.
 
 ## Dependency Map
 
@@ -282,4 +282,6 @@ Objective: Finish prompt flows, shared rendering, and automated verification so 
 
 - Active stream: Inventory and Source Discovery
 - Global blockers: None
-- TODO: Confirm: Select the concrete automated test runner and prompt-test harness before starting DOTAI-014, because the repository currently uses a placeholder `bun run test` script and that choice affects fixture and helper design.
+- Runtime composition decision: Build the CLI entrypoint around `effect/unstable/cli`, `Command.run(...)`, `BunServices.layer`, and `BunRuntime.runMain`, and prefer platform services such as `ChildProcessSpawner` over ad hoc Bun process wiring.
+- Testing decision: Use Vitest with `@effect/vitest` for all automated coverage; do not introduce Bun Test Runner suites.
+- TODO: Confirm: None.
