@@ -18,6 +18,7 @@ import {
   makeDotaiFixturePaths,
   makeDotaiTestLayer,
   makePromptTerminalLayer,
+  promptInput,
   writeSkillFixture,
 } from "./dotai-test-kit";
 import * as BunServices from "../src/platform/BunServices";
@@ -425,9 +426,10 @@ describe("dotai skills install", () => {
 
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
-        BunServices.layer,
+        BunServices.coreLayer,
+        BunServices.stdioLayer,
         makeDotaiTestLayer(fixturePaths),
-        makePromptTerminalLayer(["1"], terminalOutput),
+        makePromptTerminalLayer([promptInput.enter()], terminalOutput),
       ),
     );
 
@@ -450,7 +452,7 @@ describe("dotai skills install", () => {
         const prompted = terminalOutput.join("");
 
         expect(prompted).toContain("Select a skill to install:");
-        expect(prompted).toContain("1. alpha");
+        expect(prompted).toContain("alpha");
         expect(prompted).not.toContain("hidden-helper");
         expect(rendered).toContain("Installed skills");
         expect(rendered).toContain("Directly installed:");
@@ -487,9 +489,10 @@ describe("dotai skills install", () => {
 
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
-        BunServices.layer,
+        BunServices.coreLayer,
+        BunServices.stdioLayer,
         makeDotaiTestLayer(fixturePaths),
-        makePromptTerminalLayer(["1"], terminalOutput),
+        makePromptTerminalLayer([promptInput.enter()], terminalOutput),
       ),
     );
 
@@ -512,7 +515,7 @@ describe("dotai skills install", () => {
         const prompted = terminalOutput.join("");
 
         expect(prompted).toContain("Select a skill to install:");
-        expect(prompted).toContain("1. alpha");
+        expect(prompted).toContain("alpha");
         expect(prompted).not.toContain("hidden-helper");
         expect(rendered).toContain("Installed skills");
         expect(rendered).toContain("- alpha");

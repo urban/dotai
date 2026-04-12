@@ -17,6 +17,7 @@ import {
   makeDotaiFixturePaths,
   makeDotaiTestLayer,
   makePromptTerminalLayer,
+  promptInput,
   writeSkillFixture,
 } from "./dotai-test-kit";
 import * as BunServices from "../src/platform/BunServices";
@@ -251,9 +252,10 @@ describe("dotai skills update", () => {
 
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
-        BunServices.layer,
+        BunServices.coreLayer,
+        BunServices.stdioLayer,
         makeDotaiTestLayer(fixturePaths),
-        makePromptTerminalLayer(["2"], terminalOutput),
+        makePromptTerminalLayer([promptInput.down(), promptInput.enter()], terminalOutput),
       ),
     );
 
@@ -324,8 +326,8 @@ describe("dotai skills update", () => {
         const prompted = terminalOutput.join("");
 
         expect(prompted).toContain("Select a skill to update:");
-        expect(prompted).toContain("1. alpha");
-        expect(prompted).toContain("2. gamma");
+        expect(prompted).toContain("alpha");
+        expect(prompted).toContain("gamma");
         expect(prompted).not.toContain("beta");
         expect(prompted).not.toContain("hidden-helper");
         expect(rendered).toContain("Updated skills");

@@ -1,6 +1,6 @@
-import { Console, Effect, Option, Terminal } from "effect";
+import { Console, Effect, Option } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag, Prompt } from "effect/unstable/cli";
 
 import { LockfileStore } from "../dotai/LockfileStore";
 import { SkillCatalog } from "../dotai/SkillCatalog";
@@ -22,46 +22,31 @@ import {
   renderUpdateWorkflowResult,
 } from "../dotai/render";
 
-const renderSkillPrompt = (
-  action: "install" | "uninstall" | "update",
-  skillNames: ReadonlyArray<string>,
-): string =>
-  [
-    `Select a skill to ${action}:`,
-    ...skillNames.map((skillName, index) => `${index + 1}. ${skillName}`),
-    "Enter a number or skill name: ",
-  ].join("\n");
+type SkillSelectionAction = "install" | "uninstall" | "update";
+
+type SkillSelectionChoice = {
+  readonly description?: string;
+  readonly skillName: string;
+};
 
 const promptForSkillSelection = (
-  action: "install" | "uninstall" | "update",
-  skillNames: ReadonlyArray<string>,
+  action: SkillSelectionAction,
+  skillChoices: ReadonlyArray<SkillSelectionChoice>,
 ) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const terminal = yield* Terminal.Terminal;
-
-      if (skillNames.length === 0) {
-        return Option.none<string>();
-      }
-
-      const prompt = (): Effect.Effect<string, PlatformError | Terminal.QuitError> =>
-        Effect.gen(function* () {
-          yield* terminal.display(renderSkillPrompt(action, skillNames));
-          const response = yield* terminal.readLine;
-          const selection = resolvePromptSelection(skillNames, response);
-
-          if (Option.isSome(selection)) {
-            return selection.value;
-          }
-
-          yield* terminal.display(`Invalid selection '${response.trim()}'.\n\n`);
-
-          return yield* prompt();
-        });
-
-      return Option.some(yield* prompt());
-    }),
-  );
+  skillChoices.length === 0
+    ? Effect.succeed(Option.none<string>())
+    : Prompt.select({
+        choices: skillChoices.map((skillChoice) => ({
+          ...(skillChoice.description === undefined
+            ? {}
+            : {
+                description: skillChoice.description,
+              }),
+          title: skillChoice.skillName,
+          value: skillChoice.skillName,
+        })),
+        message: `Select a skill to ${action}:`,
+      }).pipe(Prompt.run, Effect.map(Option.some));
 
 const promptForInstallSkill = (source: string) =>
   Effect.scoped(
@@ -76,7 +61,10 @@ const promptForInstallSkill = (source: string) =>
 
       return yield* promptForSkillSelection(
         "install",
-        inventory.visibleSkills.map((skill) => skill.skillName),
+        inventory.visibleSkills.map((skill) => ({
+          description: skill.manifest.description,
+          skillName: skill.skillName,
+        })),
       );
     }),
   );
@@ -90,16 +78,19 @@ const promptForInstalledSkill = (action: "uninstall" | "update", global: boolean
       const target = yield* targetPaths.resolve({ global });
       const installedSkills = yield* skillCatalog.discoverInstalledSkills(target.skillsPath);
       const currentLockfile = yield* lockfileStore.read(target.lockfilePath);
-      const selectableSkillNames = installedSkills
+      const selectableSkills = installedSkills
         .filter((skill) => !skill.manifest.metadata.internal)
         .filter((skill) =>
           action === "uninstall"
             ? true
             : currentLockfile.skills[skill.skillName]?.implicit !== true,
         )
-        .map((skill) => skill.skillName);
+        .map((skill) => ({
+          description: skill.manifest.description,
+          skillName: skill.skillName,
+        }));
 
-      return yield* promptForSkillSelection(action, selectableSkillNames);
+      return yield* promptForSkillSelection(action, selectableSkills);
     }),
   );
 
@@ -141,27 +132,6 @@ const renderPlatformFailureReason = (error: PlatformError): string => {
   }
 
   return parts.join(" ");
-};
-
-const resolvePromptSelection = (
-  visibleSkillNames: ReadonlyArray<string>,
-  response: string,
-): Option.Option<string> => {
-  const trimmedResponse = response.trim();
-
-  if (trimmedResponse.length === 0) {
-    return Option.none();
-  }
-
-  const selectedIndex = Number(trimmedResponse);
-
-  if (Number.isInteger(selectedIndex)) {
-    const selectedSkill = visibleSkillNames[selectedIndex - 1];
-
-    return selectedSkill === undefined ? Option.none() : Option.some(selectedSkill);
-  }
-
-  return visibleSkillNames.includes(trimmedResponse) ? Option.some(trimmedResponse) : Option.none();
 };
 
 const skillsCommandBase = Command.make("skills").pipe(

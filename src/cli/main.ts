@@ -5,7 +5,7 @@ import { cliVersion, dotaiCommand } from "./app";
 import { MainLayer } from "../dotai/SkillWorkflows";
 import * as BunServices from "../platform/BunServices";
 
-const mainLayer = MainLayer.pipe(Layer.provide(BunServices.layer));
+const mainLayer = MainLayer.pipe(Layer.provide(BunServices.coreLayer));
 const runtime = ManagedRuntime.make(Layer.mergeAll(BunServices.layer, mainLayer));
 
 const program = Effect.promise(() =>

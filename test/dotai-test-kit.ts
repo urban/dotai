@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Layer, Terminal } from "effect";
+import { Cause, Effect, Layer, Option, Queue, Terminal } from "effect";
 
 import { makeMainLayer, RuntimeDirectories } from "../src/index";
 import * as BunServices from "../src/platform/BunServices";
@@ -55,24 +55,52 @@ export const makeDotaiTestLayer = (
       homeDirectory: paths.homeRoot,
     }),
     options,
-  ).pipe(Layer.provide(BunServices.layer));
+  ).pipe(Layer.provide(BunServices.coreLayer));
 
-export const makePromptTerminalLayer = (lines: ReadonlyArray<string>, output: Array<string>) => {
-  const queuedLines = [...lines];
+const makeUserInput = (options: {
+  readonly keyName: string;
+  readonly ctrl?: boolean;
+  readonly input?: string;
+  readonly meta?: boolean;
+  readonly shift?: boolean;
+}): Terminal.UserInput => ({
+  input: Option.fromNullishOr(options.input),
+  key: {
+    ctrl: options.ctrl ?? false,
+    meta: options.meta ?? false,
+    name: options.keyName,
+    shift: options.shift ?? false,
+  },
+});
 
-  return Layer.succeed(
+export const promptInput = {
+  down: (): Terminal.UserInput => makeUserInput({ keyName: "down" }),
+  enter: (): Terminal.UserInput => makeUserInput({ keyName: "enter" }),
+};
+
+export const makePromptTerminalLayer = (
+  inputs: ReadonlyArray<Terminal.UserInput>,
+  output: Array<string>,
+) =>
+  Layer.effect(
     Terminal.Terminal,
-    Terminal.make({
-      columns: Effect.succeed(80),
-      display: (text) =>
-        Effect.sync(() => {
-          output.push(text);
-        }),
-      readInput: Effect.die(new Error("Test terminal does not implement readInput.")),
-      readLine: Effect.sync(() => queuedLines.shift() ?? ""),
+    Effect.gen(function* () {
+      const queue = yield* Queue.unbounded<Terminal.UserInput, Cause.Done>();
+
+      yield* Queue.offerAll(queue, inputs);
+      yield* Queue.end(queue);
+
+      return Terminal.make({
+        columns: Effect.succeed(80),
+        display: (text) =>
+          Effect.sync(() => {
+            output.push(text);
+          }),
+        readInput: Effect.succeed(queue),
+        readLine: Effect.die(new Error("Test terminal does not implement readLine.")),
+      });
     }),
   );
-};
 
 export const writeSkillFixture = (
   skillsRoot: string,

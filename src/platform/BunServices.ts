@@ -9,12 +9,24 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import nodePath from "node:path";
-import { tmpdir } from "node:os";
 import { type ChildProcess as NodeChildProcess, spawn as spawnProcess } from "node:child_process";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
 import readline from "node:readline";
 
-import { Effect, FileSystem, Layer, Option, Path, Sink, Stdio, Stream, Terminal } from "effect";
+import {
+  Cause,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Queue,
+  Sink,
+  Stdio,
+  Stream,
+  Terminal,
+} from "effect";
 import * as PlatformError from "effect/PlatformError";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type { Command as ChildProcessCommand } from "effect/unstable/process/ChildProcess";
@@ -249,45 +261,6 @@ const fileSystemLayer = Layer.succeed(
   }),
 );
 
-const terminalLayer = Layer.succeed(
-  Terminal.Terminal,
-  Terminal.make({
-    columns: Effect.sync(() => process.stdout.columns ?? 80),
-    display: (text) =>
-      Effect.sync(() => {
-        process.stdout.write(text);
-      }),
-    readInput: Effect.die(
-      new Error("BunServices does not implement Terminal.readInput in DOTAI-001."),
-    ),
-    readLine: Effect.tryPromise({
-      try: () =>
-        new Promise<string>((resolve) => {
-          const interfaceInstance = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-
-          interfaceInstance.once("line", (line) => {
-            interfaceInstance.close();
-            resolve(line);
-          });
-        }),
-      catch: () => new Terminal.QuitError({}),
-    }),
-  }),
-);
-
-const stdioLayer = Layer.succeed(
-  Stdio.Stdio,
-  Stdio.make({
-    args: Effect.sync(() => process.argv.slice(2)),
-    stderr: () => Sink.drain,
-    stdin: Stream.empty,
-    stdout: () => Sink.drain,
-  }),
-);
-
 const childProcessSpawnerLayer = Layer.succeed(
   ChildProcessSpawner.ChildProcessSpawner,
   (() => {
@@ -364,10 +337,99 @@ const childProcessSpawnerLayer = Layer.succeed(
   })(),
 );
 
-export const layer = Layer.mergeAll(
-  fileSystemLayer,
-  Path.layer,
-  terminalLayer,
-  stdioLayer,
-  childProcessSpawnerLayer,
+export const coreLayer = Layer.mergeAll(fileSystemLayer, Path.layer, childProcessSpawnerLayer);
+
+const defaultShouldQuit = (input: Terminal.UserInput) =>
+  input.key.ctrl && (input.key.name === "c" || input.key.name === "d");
+
+export const terminalLayer = Layer.effect(
+  Terminal.Terminal,
+  Effect.gen(function* () {
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+    const interfaceInstance = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const terminalReadline = readline.createInterface({
+          escapeCodeTimeout: 50,
+          input: stdin,
+        });
+
+        readline.emitKeypressEvents(stdin, terminalReadline);
+
+        if (stdin.isTTY) {
+          stdin.setRawMode(true);
+        }
+
+        return terminalReadline;
+      }),
+      (terminalReadline) =>
+        Effect.sync(() => {
+          if (stdin.isTTY) {
+            stdin.setRawMode(false);
+          }
+
+          terminalReadline.close();
+        }),
+    );
+
+    return Terminal.make({
+      columns: Effect.sync(() => stdout.columns ?? 0),
+      display: (text) =>
+        Effect.sync(() => {
+          stdout.write(text);
+        }),
+      readInput: Effect.gen(function* () {
+        const queue = yield* Queue.unbounded<Terminal.UserInput, Cause.Done>();
+        const handleKeypress = (input: string | undefined, key: readline.Key) => {
+          const userInput: Terminal.UserInput = {
+            input: Option.fromNullishOr(input),
+            key: {
+              ctrl: key.ctrl ?? false,
+              meta: key.meta ?? false,
+              name: key.name ?? "",
+              shift: key.shift ?? false,
+            },
+          };
+
+          Queue.offerUnsafe(queue, userInput);
+
+          if (defaultShouldQuit(userInput)) {
+            Queue.endUnsafe(queue);
+          }
+        };
+
+        yield* Effect.addFinalizer(() => Effect.sync(() => stdin.off("keypress", handleKeypress)));
+        stdin.on("keypress", handleKeypress);
+
+        return queue;
+      }),
+      readLine: Effect.callback<string, Terminal.QuitError>((resume) => {
+        const onLine = (line: string) => {
+          resume(Effect.succeed(line));
+        };
+        const onClose = () => {
+          resume(Effect.fail(new Terminal.QuitError({})));
+        };
+
+        interfaceInstance.once("line", onLine);
+        interfaceInstance.once("close", onClose);
+
+        return Effect.sync(() => {
+          interfaceInstance.off("line", onLine);
+          interfaceInstance.off("close", onClose);
+        });
+      }),
+    });
+  }),
 );
+
+export const stdioLayer = Stdio.layerTest({
+  args: Effect.sync(() => process.argv.slice(2)),
+  stderr: () => Sink.drain,
+  stdin: Stream.empty,
+  stdout: () => Sink.drain,
+});
+
+export const cliLayer = Layer.mergeAll(terminalLayer, stdioLayer);
+
+export const layer = Layer.mergeAll(coreLayer, cliLayer);
