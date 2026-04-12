@@ -466,6 +466,64 @@ describe("dotai skills install", () => {
     );
   });
 
+  it("prompts for installable skills discovered from a git repo skills directory", async () => {
+    const fixturePaths = makeDotaiFixturePaths("dotai-skills-install-");
+    const terminalOutput: Array<string> = [];
+    const sourceUrl = createBareGitSkillSource(
+      fixturePaths.fixtureRoot,
+      "skill-catalog",
+      (workingTreePath) => {
+        writeSkillFixture(workingTreePath, "skills/alpha-skill", {
+          description: "Alpha skill description",
+          name: "alpha",
+        });
+        writeSkillFixture(workingTreePath, "skills/.system/hidden-helper", {
+          description: "Hidden helper skill",
+          internal: true,
+          name: "hidden-helper",
+        });
+      },
+    );
+
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(
+        BunServices.layer,
+        makeDotaiTestLayer(fixturePaths),
+        makePromptTerminalLayer(["1"], terminalOutput),
+      ),
+    );
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const output: Array<string> = [];
+        const originalConsoleLog = console.log;
+
+        console.log = (...args: ReadonlyArray<unknown>) => {
+          output.push(args.map((value) => String(value)).join(" "));
+        };
+
+        try {
+          yield* runDotaiCli(["skills", "add", sourceUrl]);
+        } finally {
+          console.log = originalConsoleLog;
+        }
+
+        const rendered = output.join("\n");
+        const prompted = terminalOutput.join("");
+
+        expect(prompted).toContain("Select a skill to install:");
+        expect(prompted).toContain("1. alpha");
+        expect(prompted).not.toContain("hidden-helper");
+        expect(rendered).toContain("Installed skills");
+        expect(rendered).toContain("- alpha");
+      }),
+    );
+
+    expect(
+      existsSync(join(fixturePaths.projectRoot, ".agents", "skills", "alpha", "SKILL.md")),
+    ).toBe(true);
+  });
+
   it("renders an explicit no-op when the selected skill is already installed directly", async () => {
     const fixturePaths = makeDotaiFixturePaths("dotai-skills-install-");
 

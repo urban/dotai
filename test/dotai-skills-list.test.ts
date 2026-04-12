@@ -112,6 +112,74 @@ describe("dotai skills list", () => {
     );
   });
 
+  it("discovers source skills from the supported repo search locations in precedence order", async () => {
+    const fixturePaths = makeDotaiFixturePaths("dotai-skills-list-");
+    mkdirSync(fixturePaths.sourceRoot, { recursive: true });
+
+    writeSkillFixture(fixturePaths.sourceRoot, ".", {
+      description: "Root skill",
+      name: "root-skill",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "skills/visible-skill", {
+      description: "Visible skill under skills",
+      name: "visible-skill",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "skills/.curated/curated-skill", {
+      description: "Curated skill",
+      name: "curated-skill",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "skills/.experimental/experimental-skill", {
+      description: "Experimental skill",
+      name: "experimental-skill",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "skills/.system/system-helper", {
+      description: "System helper skill",
+      internal: true,
+      name: "system-helper",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, ".agents/skills/agent-skill", {
+      description: "Agent skill",
+      name: "agent-skill",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "skills/root-skill-shadow", {
+      description: "Shadowed duplicate skill",
+      name: "root-skill",
+    });
+
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(BunServices.layer, makeDotaiTestLayer(fixturePaths)),
+    );
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const workflows = yield* SkillWorkflows;
+        const result = yield* workflows.discover({
+          global: false,
+          source: fixturePaths.sourceRoot,
+        });
+
+        expect(result.visibleSkills.map((skill) => skill.skillName)).toEqual([
+          "agent-skill",
+          "curated-skill",
+          "experimental-skill",
+          "root-skill",
+          "visible-skill",
+        ]);
+        expect(result.allSkills.map((skill) => skill.skillName)).toEqual([
+          "agent-skill",
+          "curated-skill",
+          "experimental-skill",
+          "root-skill",
+          "system-helper",
+          "visible-skill",
+        ]);
+        expect(result.allSkills.find((skill) => skill.skillName === "root-skill")?.skillPath).toBe(
+          fixturePaths.sourceRoot,
+        );
+      }),
+    );
+  });
+
   it("routes git-backed discovery through the command tree and keeps target inventory untouched", async () => {
     const fixturePaths = makeDotaiFixturePaths("dotai-skills-list-");
     mkdirSync(fixturePaths.sourceRoot, { recursive: true });

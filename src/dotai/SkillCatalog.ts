@@ -19,6 +19,14 @@ interface ParsedSkillDirectory {
   readonly skillPath: string;
 }
 
+const sourceDiscoveryRelativeRoots = [
+  "skills",
+  "skills/.curated",
+  "skills/.experimental",
+  "skills/.system",
+  ".agents/skills",
+] as const;
+
 const extractFrontmatter = (content: string): string | undefined => {
   const normalized = content.replace(/\r\n/g, "\n");
 
@@ -171,6 +179,29 @@ export class SkillCatalog extends Context.Service<
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
+      const parseDiscoveredSkill = Effect.fn("SkillCatalog.parseDiscoveredSkill")(function* (
+        skillPath: string,
+        source?: string,
+      ): Effect.fn.Return<ParsedSkillDirectory, PlatformError | SkillManifestInvalidError> {
+        const manifestPath = path.join(skillPath, "SKILL.md");
+        const manifestFile = yield* fileSystem.readFileString(manifestPath);
+        const manifestResult = parseSkillManifest(manifestFile);
+
+        if ("reason" in manifestResult) {
+          return yield* new SkillManifestInvalidError({
+            manifestPath,
+            reason: manifestResult.reason,
+            source,
+          });
+        }
+
+        return {
+          manifest: manifestResult.manifest,
+          skillName: manifestResult.manifest.name,
+          skillPath,
+        };
+      });
+
       const discoverSkillDirectories = Effect.fn("SkillCatalog.discoverSkillDirectories")(
         function* (
           sourceRoot: string,
@@ -215,22 +246,7 @@ export class SkillCatalog extends Context.Service<
               continue;
             }
 
-            const manifestFile = yield* fileSystem.readFileString(manifestPath);
-            const manifestResult = parseSkillManifest(manifestFile);
-
-            if ("reason" in manifestResult) {
-              return yield* new SkillManifestInvalidError({
-                manifestPath,
-                reason: manifestResult.reason,
-                source,
-              });
-            }
-
-            discoveredSkills.push({
-              manifest: manifestResult.manifest,
-              skillName: manifestResult.manifest.name,
-              skillPath: entryPath,
-            });
+            discoveredSkills.push(yield* parseDiscoveredSkill(entryPath, source));
           }
 
           discoveredSkills.sort((left, right) => left.skillName.localeCompare(right.skillName));
@@ -238,6 +254,78 @@ export class SkillCatalog extends Context.Service<
           return discoveredSkills;
         },
       );
+
+      const discoverSourceSkillDirectories = Effect.fn(
+        "SkillCatalog.discoverSourceSkillDirectories",
+      )(function* (
+        sourceRoot: string,
+        source: string,
+      ): Effect.fn.Return<
+        ReadonlyArray<ParsedSkillDirectory>,
+        PlatformError | DiscoveryRootNotFoundError | SkillManifestInvalidError
+      > {
+        const sourceRootExists = yield* fileSystem.exists(sourceRoot);
+
+        if (!sourceRootExists) {
+          return yield* new DiscoveryRootNotFoundError({
+            path: sourceRoot,
+            source,
+          });
+        }
+
+        const sourceRootInfo = yield* fileSystem.stat(sourceRoot);
+
+        if (sourceRootInfo.type !== "Directory") {
+          return yield* new DiscoveryRootNotFoundError({
+            path: sourceRoot,
+            source,
+          });
+        }
+
+        const discoveredByName = new Map<string, ParsedSkillDirectory>();
+        const rootManifestPath = path.join(sourceRoot, "SKILL.md");
+        const hasRootManifest = yield* fileSystem.exists(rootManifestPath);
+
+        if (hasRootManifest) {
+          const rootSkill = yield* parseDiscoveredSkill(sourceRoot, source);
+          discoveredByName.set(rootSkill.skillName, rootSkill);
+        }
+
+        const rootSkills = yield* discoverSkillDirectories(sourceRoot, source);
+
+        for (const rootSkill of rootSkills) {
+          if (!discoveredByName.has(rootSkill.skillName)) {
+            discoveredByName.set(rootSkill.skillName, rootSkill);
+          }
+        }
+
+        for (const relativeRoot of sourceDiscoveryRelativeRoots) {
+          const candidateRoot = path.join(sourceRoot, relativeRoot);
+          const candidateExists = yield* fileSystem.exists(candidateRoot);
+
+          if (!candidateExists) {
+            continue;
+          }
+
+          const candidateInfo = yield* fileSystem.stat(candidateRoot);
+
+          if (candidateInfo.type !== "Directory") {
+            continue;
+          }
+
+          const candidateSkills = yield* discoverSkillDirectories(candidateRoot, source);
+
+          for (const candidateSkill of candidateSkills) {
+            if (!discoveredByName.has(candidateSkill.skillName)) {
+              discoveredByName.set(candidateSkill.skillName, candidateSkill);
+            }
+          }
+        }
+
+        return [...discoveredByName.values()].sort((left, right) =>
+          left.skillName.localeCompare(right.skillName),
+        );
+      });
 
       const listInstalledSkills = Effect.fn("SkillCatalog.listInstalledSkills")(function* (
         skillsPath: string,
@@ -279,7 +367,7 @@ export class SkillCatalog extends Context.Service<
         SourceInventory,
         PlatformError | DiscoveryRootNotFoundError | SkillManifestInvalidError
       > {
-        const discoveredSkills = yield* discoverSkillDirectories(
+        const discoveredSkills = yield* discoverSourceSkillDirectories(
           sourceRoot,
           source._tag === "LocalSource" ? source.filepath : source.URL,
         );
