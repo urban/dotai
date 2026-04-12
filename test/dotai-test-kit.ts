@@ -76,6 +76,7 @@ const makeUserInput = (options: {
 export const promptInput = {
   down: (): Terminal.UserInput => makeUserInput({ keyName: "down" }),
   enter: (): Terminal.UserInput => makeUserInput({ keyName: "enter" }),
+  space: (): Terminal.UserInput => makeUserInput({ input: " ", keyName: "space" }),
 };
 
 export const makePromptTerminalLayer = (

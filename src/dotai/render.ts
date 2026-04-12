@@ -152,17 +152,26 @@ export const renderInstallWorkflowResult = (result: InstallWorkflowResult): stri
         }),
         primarySection: {
           heading: "Directly installed:",
-          lines: [result.installedSkill],
+          lines: result.directSkillsInstalled,
         },
-        secondarySections:
-          result.dependencySkillsInstalled.length === 0
+        secondarySections: [
+          ...(result.alreadyDirectSkills.length === 0
+            ? []
+            : [
+                {
+                  heading: "Already direct:",
+                  lines: result.alreadyDirectSkills,
+                },
+              ]),
+          ...(result.dependencySkillsInstalled.length === 0
             ? []
             : [
                 {
                   heading: "Dependencies installed:",
                   lines: result.dependencySkillsInstalled,
                 },
-              ],
+              ]),
+        ],
         footer: "Lock file updated.",
       });
     case "InstallWorkflowNoopResult":

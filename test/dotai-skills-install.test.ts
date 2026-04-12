@@ -44,7 +44,7 @@ describe("dotai skills install", () => {
         const workflows = yield* SkillWorkflows;
         const result = yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
         const rendered = renderInstallWorkflowResult(result);
@@ -119,7 +119,7 @@ describe("dotai skills install", () => {
 
           yield* workflows.install({
             global: false,
-            requestedSkillName: "alpha",
+            requestedSkillNames: ["alpha"],
             source: fixturePaths.sourceRoot,
           });
         }),
@@ -155,7 +155,7 @@ describe("dotai skills install", () => {
         const workflows = yield* SkillWorkflows;
         const result = yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
         const rendered = renderInstallWorkflowResult(result);
@@ -198,6 +198,78 @@ describe("dotai skills install", () => {
     });
   });
 
+  it("installs multiple selected roots and deduplicates shared dependencies", async () => {
+    const fixturePaths = makeDotaiFixturePaths("dotai-skills-install-");
+
+    writeSkillFixture(fixturePaths.sourceRoot, "helper-skill", {
+      description: "Helper skill description",
+      internal: true,
+      name: "helper",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "alpha-skill", {
+      dependencies: ["helper"],
+      description: "Alpha skill description",
+      name: "alpha",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "beta-skill", {
+      dependencies: ["helper"],
+      description: "Beta skill description",
+      name: "beta",
+    });
+
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(BunServices.layer, makeDotaiTestLayer(fixturePaths)),
+    );
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const workflows = yield* SkillWorkflows;
+        const result = yield* workflows.install({
+          global: false,
+          requestedSkillNames: ["alpha", "beta"],
+          source: fixturePaths.sourceRoot,
+        });
+        const rendered = renderInstallWorkflowResult(result);
+
+        expect(rendered).toContain("Directly installed:");
+        expect(rendered).toContain("- alpha");
+        expect(rendered).toContain("- beta");
+        expect(rendered).toContain("Dependencies installed:");
+        expect(rendered).toContain("- helper");
+      }),
+    );
+
+    const lockfile = JSON.parse(readFileSync(fixturePaths.lockfilePath, "utf8"));
+
+    expect(lockfile).toEqual({
+      skills: {
+        alpha: {
+          requiredBy: [],
+          source: {
+            _tag: "LocalSource",
+            filepath: fixturePaths.sourceRoot,
+          },
+        },
+        beta: {
+          requiredBy: [],
+          source: {
+            _tag: "LocalSource",
+            filepath: fixturePaths.sourceRoot,
+          },
+        },
+        helper: {
+          implicit: true,
+          requiredBy: ["alpha", "beta"],
+          source: {
+            _tag: "LocalSource",
+            filepath: fixturePaths.sourceRoot,
+          },
+        },
+      },
+      version: 1,
+    });
+  });
+
   it("promotes an implicit dependency to a direct install without reinstalling files", async () => {
     const fixturePaths = makeDotaiFixturePaths("dotai-skills-install-");
 
@@ -219,7 +291,7 @@ describe("dotai skills install", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
       }),
@@ -235,18 +307,21 @@ describe("dotai skills install", () => {
 
     writeFileSync(installedHelperPath, "preserve me\n");
 
-    await runtime.runPromise(
+    const rendered = await runtime.runPromise(
       Effect.gen(function* () {
         const workflows = yield* SkillWorkflows;
-
-        yield* workflows.install({
+        const result = yield* workflows.install({
           global: false,
-          requestedSkillName: "beta",
+          requestedSkillNames: ["beta"],
           source: fixturePaths.sourceRoot,
         });
+
+        return renderInstallWorkflowResult(result);
       }),
     );
 
+    expect(rendered).toContain("Directly installed:");
+    expect(rendered).toContain("- beta");
     expect(readFileSync(installedHelperPath, "utf8")).toBe("preserve me\n");
 
     const lockfile = JSON.parse(readFileSync(fixturePaths.lockfilePath, "utf8"));
@@ -258,6 +333,51 @@ describe("dotai skills install", () => {
         filepath: fixturePaths.sourceRoot,
       },
     });
+  });
+
+  it("reports already-direct roots separately when a mixed selection installs new skills", async () => {
+    const fixturePaths = makeDotaiFixturePaths("dotai-skills-install-");
+
+    writeSkillFixture(fixturePaths.sourceRoot, "alpha-skill", {
+      description: "Alpha skill description",
+      name: "alpha",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "beta-skill", {
+      description: "Beta skill description",
+      name: "beta",
+    });
+
+    const runtime = ManagedRuntime.make(makeDotaiTestLayer(fixturePaths));
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const workflows = yield* SkillWorkflows;
+
+        yield* workflows.install({
+          global: false,
+          requestedSkillNames: ["alpha"],
+          source: fixturePaths.sourceRoot,
+        });
+      }),
+    );
+
+    const rendered = await runtime.runPromise(
+      Effect.gen(function* () {
+        const workflows = yield* SkillWorkflows;
+        const result = yield* workflows.install({
+          global: false,
+          requestedSkillNames: ["alpha", "beta"],
+          source: fixturePaths.sourceRoot,
+        });
+
+        return renderInstallWorkflowResult(result);
+      }),
+    );
+
+    expect(rendered).toContain("Directly installed:");
+    expect(rendered).toContain("- beta");
+    expect(rendered).toContain("Already direct:");
+    expect(rendered).toContain("- alpha");
   });
 
   it("installs URL-based dependencies from a git source before mutating the target", async () => {
@@ -286,7 +406,7 @@ describe("dotai skills install", () => {
         const workflows = yield* SkillWorkflows;
         const result = yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
         const rendered = renderInstallWorkflowResult(result);
@@ -332,7 +452,7 @@ describe("dotai skills install", () => {
         return yield* workflows
           .install({
             global: false,
-            requestedSkillName: "alpha",
+            requestedSkillNames: ["alpha"],
             source: fixturePaths.sourceRoot,
           })
           .pipe(
@@ -342,7 +462,7 @@ describe("dotai skills install", () => {
                   ? renderUnexpectedInstallFailure(error)
                   : renderInstallWorkflowFailure(error, {
                       global: false,
-                      requestedSkillName: "alpha",
+                      requestedSkillNames: ["alpha"],
                       source: fixturePaths.sourceRoot,
                     }),
               onSuccess: () => "unexpected success",
@@ -383,7 +503,7 @@ describe("dotai skills install", () => {
         return yield* workflows
           .install({
             global: false,
-            requestedSkillName: "alpha",
+            requestedSkillNames: ["alpha"],
             source: fixturePaths.sourceRoot,
           })
           .pipe(
@@ -393,7 +513,7 @@ describe("dotai skills install", () => {
                   ? renderUnexpectedInstallFailure(error)
                   : renderInstallWorkflowFailure(error, {
                       global: false,
-                      requestedSkillName: "alpha",
+                      requestedSkillNames: ["alpha"],
                       source: fixturePaths.sourceRoot,
                     }),
               onSuccess: () => "unexpected success",
@@ -414,9 +534,13 @@ describe("dotai skills install", () => {
     const fixturePaths = makeDotaiFixturePaths("dotai-skills-install-");
     const terminalOutput: Array<string> = [];
 
-    writeSkillFixture(fixturePaths.sourceRoot, "visible-skill", {
-      description: "Visible source skill",
+    writeSkillFixture(fixturePaths.sourceRoot, "visible-alpha", {
+      description: "Visible alpha skill",
       name: "alpha",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "visible-beta", {
+      description: "Visible beta skill",
+      name: "beta",
     });
     writeSkillFixture(fixturePaths.sourceRoot, "hidden-skill", {
       description: "Hidden helper skill",
@@ -429,7 +553,7 @@ describe("dotai skills install", () => {
         BunServices.coreLayer,
         BunServices.stdioLayer,
         makeDotaiTestLayer(fixturePaths),
-        makePromptTerminalLayer([promptInput.enter()], terminalOutput),
+        makePromptTerminalLayer([promptInput.space(), promptInput.enter()], terminalOutput),
       ),
     );
 
@@ -451,17 +575,22 @@ describe("dotai skills install", () => {
         const rendered = output.join("\n");
         const prompted = terminalOutput.join("");
 
-        expect(prompted).toContain("Select a skill to install:");
+        expect(prompted).toContain("Select skills to install:");
         expect(prompted).toContain("alpha");
+        expect(prompted).toContain("beta");
         expect(prompted).not.toContain("hidden-helper");
         expect(rendered).toContain("Installed skills");
         expect(rendered).toContain("Directly installed:");
         expect(rendered).toContain("- alpha");
+        expect(rendered).toContain("- beta");
       }),
     );
 
     expect(
       existsSync(join(fixturePaths.projectRoot, ".agents", "skills", "alpha", "SKILL.md")),
+    ).toBe(true);
+    expect(
+      existsSync(join(fixturePaths.projectRoot, ".agents", "skills", "beta", "SKILL.md")),
     ).toBe(true);
     expect(existsSync(join(fixturePaths.projectRoot, ".agents", "skills", "hidden-helper"))).toBe(
       false,
@@ -492,7 +621,7 @@ describe("dotai skills install", () => {
         BunServices.coreLayer,
         BunServices.stdioLayer,
         makeDotaiTestLayer(fixturePaths),
-        makePromptTerminalLayer([promptInput.enter()], terminalOutput),
+        makePromptTerminalLayer([promptInput.space(), promptInput.enter()], terminalOutput),
       ),
     );
 
@@ -514,7 +643,7 @@ describe("dotai skills install", () => {
         const rendered = output.join("\n");
         const prompted = terminalOutput.join("");
 
-        expect(prompted).toContain("Select a skill to install:");
+        expect(prompted).toContain("Select skills to install:");
         expect(prompted).toContain("alpha");
         expect(prompted).not.toContain("hidden-helper");
         expect(rendered).toContain("Installed skills");
@@ -545,13 +674,13 @@ describe("dotai skills install", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
 
         const result = yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
         const rendered = renderInstallWorkflowResult(result);
@@ -564,12 +693,16 @@ describe("dotai skills install", () => {
     );
   });
 
-  it("routes the add alias through the install workflow", async () => {
+  it("routes the add alias through the multi-root install workflow", async () => {
     const fixturePaths = makeDotaiFixturePaths("dotai-skills-install-");
 
     writeSkillFixture(fixturePaths.sourceRoot, "alpha-skill", {
       description: "Alpha skill description",
       name: "alpha",
+    });
+    writeSkillFixture(fixturePaths.sourceRoot, "beta-skill", {
+      description: "Beta skill description",
+      name: "beta",
     });
 
     const runtime = ManagedRuntime.make(
@@ -586,7 +719,7 @@ describe("dotai skills install", () => {
         };
 
         try {
-          yield* runDotaiCli(["skills", "add", fixturePaths.sourceRoot, "alpha"]);
+          yield* runDotaiCli(["skills", "add", fixturePaths.sourceRoot, "alpha", "beta"]);
         } finally {
           console.log = originalConsoleLog;
         }
@@ -596,11 +729,15 @@ describe("dotai skills install", () => {
         expect(rendered).toContain("Installed skills");
         expect(rendered).toContain("Directly installed:");
         expect(rendered).toContain("- alpha");
+        expect(rendered).toContain("- beta");
       }),
     );
 
     expect(
       existsSync(join(fixturePaths.projectRoot, ".agents", "skills", "alpha", "SKILL.md")),
+    ).toBe(true);
+    expect(
+      existsSync(join(fixturePaths.projectRoot, ".agents", "skills", "beta", "SKILL.md")),
     ).toBe(true);
   });
 });

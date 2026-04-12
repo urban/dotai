@@ -27,8 +27,9 @@ describe("dotai renderer", () => {
   it("renders install success using the shared headline-context-primary-footer order", () => {
     const result: InstallWorkflowResult = {
       _tag: "InstallWorkflowResult",
+      alreadyDirectSkills: [],
       dependencySkillsInstalled: ["beta", "gamma"],
-      installedSkill: "alpha",
+      directSkillsInstalled: ["alpha"],
       lockfilePath: target.lockfilePath,
       source: {
         normalizedSource: {
@@ -54,6 +55,44 @@ describe("dotai renderer", () => {
         "- alpha",
         "Dependencies installed:",
         "- beta",
+        "- gamma",
+        "Lock file updated.",
+      ].join("\n"),
+    );
+  });
+
+  it("renders already-direct roots after newly installed roots", () => {
+    const result: InstallWorkflowResult = {
+      _tag: "InstallWorkflowResult",
+      alreadyDirectSkills: ["alpha"],
+      dependencySkillsInstalled: ["gamma"],
+      directSkillsInstalled: ["beta"],
+      lockfilePath: target.lockfilePath,
+      source: {
+        normalizedSource: {
+          _tag: "LocalSource",
+          filepath: "/catalog",
+        },
+        namespacePath: "/catalog",
+        selectionPath: "/catalog",
+        sourceLocator: "/catalog",
+        workspacePath: "/tmp/catalog",
+      },
+      target,
+    };
+
+    expect(renderInstallWorkflowResult(result)).toBe(
+      [
+        "Installed skills",
+        "Target: local",
+        "Target root: /workspace",
+        "Source: /catalog",
+        "Lock file: /workspace/dotai-lock.json",
+        "Directly installed:",
+        "- beta",
+        "Already direct:",
+        "- alpha",
+        "Dependencies installed:",
         "- gamma",
         "Lock file updated.",
       ].join("\n"),
@@ -118,7 +157,7 @@ describe("dotai renderer", () => {
         error,
         {
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: "/catalog",
         },
         target,

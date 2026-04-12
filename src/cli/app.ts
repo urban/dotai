@@ -2,6 +2,7 @@ import { Console, Effect, Option } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { Argument, Command, Flag, Prompt } from "effect/unstable/cli";
 
+import type { InstallWorkflowInput } from "../dotai/domain";
 import { LockfileStore } from "../dotai/LockfileStore";
 import { SkillCatalog } from "../dotai/SkillCatalog";
 import { SkillWorkflows } from "../dotai/SkillWorkflows";
@@ -29,8 +30,18 @@ type SkillSelectionChoice = {
   readonly skillName: string;
 };
 
-const promptForSkillSelection = (
-  action: SkillSelectionAction,
+const toRequestedSkillNames = (
+  skillNames: ReadonlyArray<string>,
+): Option.Option<InstallWorkflowInput["requestedSkillNames"]> => {
+  const [firstSkillName, ...remainingSkillNames] = skillNames;
+
+  return firstSkillName === undefined
+    ? Option.none()
+    : Option.some([firstSkillName, ...remainingSkillNames]);
+};
+
+const promptForSingleSkillSelection = (
+  action: Exclude<SkillSelectionAction, "install">,
   skillChoices: ReadonlyArray<SkillSelectionChoice>,
 ) =>
   skillChoices.length === 0
@@ -48,7 +59,7 @@ const promptForSkillSelection = (
         message: `Select a skill to ${action}:`,
       }).pipe(Prompt.run, Effect.map(Option.some));
 
-const promptForInstallSkill = (source: string) =>
+const promptForInstallSkills = (source: string) =>
   Effect.scoped(
     Effect.gen(function* () {
       const sourceWorkspace = yield* SourceWorkspace;
@@ -59,13 +70,31 @@ const promptForInstallSkill = (source: string) =>
         stagedSource.normalizedSource,
       );
 
-      return yield* promptForSkillSelection(
-        "install",
-        inventory.visibleSkills.map((skill) => ({
-          description: skill.manifest.description,
-          skillName: skill.skillName,
+      const skillChoices = inventory.visibleSkills.map((skill) => ({
+        description: skill.manifest.description,
+        skillName: skill.skillName,
+      }));
+
+      if (skillChoices.length === 0) {
+        return Option.none<InstallWorkflowInput["requestedSkillNames"]>();
+      }
+
+      const selectedSkillNames = yield* Prompt.multiSelect({
+        choices: skillChoices.map((skillChoice) => ({
+          ...(skillChoice.description === undefined
+            ? {}
+            : {
+                description: skillChoice.description,
+              }),
+          title: skillChoice.skillName,
+          value: skillChoice.skillName,
         })),
-      );
+        message: "Select skills to install:",
+        min: 1,
+      }).pipe(Prompt.run);
+      const requestedSkillNames = toRequestedSkillNames(selectedSkillNames);
+
+      return Option.isSome(requestedSkillNames) ? requestedSkillNames : Option.none();
     }),
   );
 
@@ -90,7 +119,7 @@ const promptForInstalledSkill = (action: "uninstall" | "update", global: boolean
           skillName: skill.skillName,
         }));
 
-      return yield* promptForSkillSelection(action, selectableSkills);
+      return yield* promptForSingleSkillSelection(action, selectableSkills);
     }),
   );
 
@@ -203,7 +232,7 @@ const discoverCommand = Command.make("discover", {
 
 const installCommand = Command.make("install", {
   source: Argument.string("source"),
-  requestedSkillName: Argument.string("skill-name").pipe(Argument.optional),
+  requestedSkillNames: Argument.string("skill-name").pipe(Argument.variadic()),
 }).pipe(
   Command.withAlias("add"),
   Command.withHandler((input) =>
@@ -220,16 +249,17 @@ const installCommand = Command.make("install", {
           Console.error(
             renderInstallWorkflowFailure(error, {
               ...targetInput,
-              requestedSkillName: "unknown",
+              requestedSkillNames: ["unknown"],
             }),
           ),
         onSuccess: (target) =>
           Effect.gen(function* () {
-            const maybeRequestedSkillName = Option.isSome(input.requestedSkillName)
-              ? Effect.succeed(Option.some(input.requestedSkillName.value))
-              : promptForInstallSkill(input.source);
+            const requestedSkillNamesFromArgs = toRequestedSkillNames(input.requestedSkillNames);
+            const maybeRequestedSkillNames = Option.isSome(requestedSkillNamesFromArgs)
+              ? Effect.succeed(requestedSkillNamesFromArgs)
+              : promptForInstallSkills(input.source);
 
-            yield* Effect.matchEffect(maybeRequestedSkillName, {
+            yield* Effect.matchEffect(maybeRequestedSkillNames, {
               onFailure: (error) =>
                 Console.error(
                   error._tag === "PlatformError"
@@ -244,18 +274,18 @@ const installCommand = Command.make("install", {
                           error,
                           {
                             ...targetInput,
-                            requestedSkillName: "unknown",
+                            requestedSkillNames: ["unknown"],
                           },
                           target,
                         ),
                 ),
-              onSuccess: (requestedSkillNameOption) =>
-                Option.isNone(requestedSkillNameOption)
+              onSuccess: (requestedSkillNamesOption) =>
+                Option.isNone(requestedSkillNamesOption)
                   ? Console.log(renderNoEligibleSelection("install", target, input.source))
                   : Effect.gen(function* () {
                       const workflowInput = {
                         ...targetInput,
-                        requestedSkillName: requestedSkillNameOption.value,
+                        requestedSkillNames: requestedSkillNamesOption.value,
                       };
 
                       yield* Effect.matchEffect(workflows.install(workflowInput), {

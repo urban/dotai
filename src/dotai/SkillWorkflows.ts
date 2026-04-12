@@ -149,6 +149,14 @@ export class SkillWorkflows extends Context.Service<
           reason: error.reason,
         });
 
+      const formatAlreadyDirectInstallReason = (requestedSkills: ReadonlyArray<string>): string => {
+        const quotedSkillNames = requestedSkills.map((skillName) => `'${skillName}'`);
+
+        return requestedSkills.length === 1
+          ? `Skill ${quotedSkillNames[0]} is already installed directly.`
+          : `Skills ${quotedSkillNames.join(", ")} are already installed directly.`;
+      };
+
       const list = Effect.fn("SkillWorkflows.list")(function* (
         input: ListWorkflowInput,
       ): Effect.fn.Return<
@@ -229,10 +237,9 @@ export class SkillWorkflows extends Context.Service<
               stagedSource.normalizedSource,
             );
             const currentLockfile = yield* lockfileStore.read(target.lockfilePath);
-            const existingRequestedEntry = currentLockfile.skills[input.requestedSkillName];
             const installPlan = yield* dependencyPlanner.planInstall(
               currentLockfile,
-              input.requestedSkillName,
+              input.requestedSkillNames,
               {
                 inventory,
                 stagedSource,
@@ -241,14 +248,13 @@ export class SkillWorkflows extends Context.Service<
 
             if (
               installPlan.skillsToInstall.length === 0 &&
-              existingRequestedEntry !== undefined &&
-              existingRequestedEntry.implicit !== true
+              installPlan.directSkillsInstalled.length === 0
             ) {
               const result: InstallWorkflowResult = {
                 _tag: "InstallWorkflowNoopResult",
                 lockfilePath: target.lockfilePath,
-                reason: `Skill '${input.requestedSkillName}' is already installed directly.`,
-                requestedSkill: input.requestedSkillName,
+                reason: formatAlreadyDirectInstallReason(installPlan.alreadyDirectSkills),
+                requestedSkills: installPlan.alreadyDirectSkills,
                 source: stagedSource,
                 target,
               };
@@ -299,8 +305,9 @@ export class SkillWorkflows extends Context.Service<
 
             const result: InstallWorkflowResult = {
               _tag: "InstallWorkflowResult",
+              alreadyDirectSkills: installPlan.alreadyDirectSkills,
               dependencySkillsInstalled: installPlan.dependencySkillsInstalled,
-              installedSkill: installPlan.requestedSkill.skillName,
+              directSkillsInstalled: installPlan.directSkillsInstalled,
               lockfilePath: target.lockfilePath,
               source: stagedSource,
               target,

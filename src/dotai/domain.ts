@@ -15,7 +15,7 @@ export type DiscoverWorkflowInput = Schema.Schema.Type<typeof DiscoverWorkflowIn
 
 export const InstallWorkflowInput = Schema.Struct({
   global: Schema.Boolean,
-  requestedSkillName: Schema.String,
+  requestedSkillNames: Schema.NonEmptyArray(Schema.String),
   source: Schema.String,
 });
 
@@ -108,8 +108,9 @@ export interface InstalledSkill {
 
 export interface InstallWorkflowSuccessResult {
   readonly _tag: "InstallWorkflowResult";
+  readonly alreadyDirectSkills: ReadonlyArray<string>;
   readonly dependencySkillsInstalled: ReadonlyArray<string>;
-  readonly installedSkill: string;
+  readonly directSkillsInstalled: ReadonlyArray<string>;
   readonly lockfilePath: string;
   readonly source: StagedSource;
   readonly target: ResolvedTarget;
@@ -119,7 +120,7 @@ export interface InstallWorkflowNoopResult {
   readonly _tag: "InstallWorkflowNoopResult";
   readonly lockfilePath: string;
   readonly reason: string;
-  readonly requestedSkill: string;
+  readonly requestedSkills: ReadonlyArray<string>;
   readonly source: StagedSource;
   readonly target: ResolvedTarget;
 }
@@ -174,13 +175,13 @@ export interface UpdateWorkflowNoopResult {
 export type UpdateWorkflowResult = UpdateWorkflowSuccessResult | UpdateWorkflowNoopResult;
 
 export interface InstallPlanStep {
-  readonly implicit: boolean;
   readonly skill: DiscoveredSkill;
 }
 
 export interface InstallPlan {
+  readonly alreadyDirectSkills: ReadonlyArray<string>;
   readonly dependencySkillsInstalled: ReadonlyArray<string>;
-  readonly requestedSkill: DiscoveredSkill;
+  readonly directSkillsInstalled: ReadonlyArray<string>;
   readonly skillsToInstall: ReadonlyArray<InstallPlanStep>;
   readonly nextLockfile: DotaiLockfile;
 }

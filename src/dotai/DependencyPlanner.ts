@@ -50,6 +50,22 @@ interface SkillVisitContext {
 const toSortedReadonlyArray = (values: Set<string>): ReadonlyArray<string> =>
   Array.from(values).sort((left, right) => left.localeCompare(right));
 
+const dedupeValues = (values: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const seen = new Set<string>();
+  const dedupedValues: Array<string> = [];
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    dedupedValues.push(value);
+  }
+
+  return dedupedValues;
+};
+
 const isDependencySourceLocator = (value: string): boolean =>
   value.startsWith("./") ||
   value.startsWith("../") ||
@@ -175,7 +191,7 @@ export class DependencyPlanner extends Context.Service<
   {
     readonly planInstall: (
       currentLockfile: DotaiLockfile,
-      requestedSkillName: string,
+      requestedSkillNames: ReadonlyArray<string>,
       sourceContext: SourceContext,
     ) => Effect.Effect<
       InstallPlan,
@@ -225,7 +241,7 @@ export class DependencyPlanner extends Context.Service<
 
       const planInstall = Effect.fn("DependencyPlanner.planInstall")(function* (
         currentLockfile: DotaiLockfile,
-        requestedSkillName: string,
+        requestedSkillNames: ReadonlyArray<string>,
         rootSourceContext: SourceContext,
       ): Effect.fn.Return<
         InstallPlan,
@@ -246,15 +262,24 @@ export class DependencyPlanner extends Context.Service<
             (skill) => [skill.skillName, skill] as const,
           ),
         );
-        const requestedSkill = visibleSkillsByName.get(requestedSkillName);
+        const requestedSkills: Array<DiscoveredSkill> = [];
 
-        if (requestedSkill === undefined) {
-          return yield* new RequestedSkillNotFoundError({
-            skillName: requestedSkillName,
-            source: rootSourceContext.stagedSource.sourceLocator,
-          });
+        for (const requestedSkillName of dedupeValues(requestedSkillNames)) {
+          const requestedSkill = visibleSkillsByName.get(requestedSkillName);
+
+          if (requestedSkill === undefined) {
+            return yield* new RequestedSkillNotFoundError({
+              skillName: requestedSkillName,
+              source: rootSourceContext.stagedSource.sourceLocator,
+            });
+          }
+
+          requestedSkills.push(requestedSkill);
         }
 
+        const requestedSkillNameSet = new Set(
+          requestedSkills.map((requestedSkill) => requestedSkill.skillName),
+        );
         const orderedNewSkills: Array<InstallPlanStep> = [];
         const plannedSkills = new Map<string, MutablePlannedSkill>();
         const sourceContextsByKey = new Map<string, SourceContext>([
@@ -461,16 +486,17 @@ export class DependencyPlanner extends Context.Service<
 
           if (!(skill.skillName in currentLockfile.skills)) {
             orderedNewSkills.push({
-              implicit: plannedSkill.implicit,
               skill,
             });
           }
         });
 
-        yield* visit(requestedSkill, {
-          explicit: true,
-          sourceContext: rootSourceContext,
-        });
+        for (const requestedSkill of requestedSkills) {
+          yield* visit(requestedSkill, {
+            explicit: true,
+            sourceContext: rootSourceContext,
+          });
+        }
 
         const nextSkills = {
           ...currentLockfile.skills,
@@ -485,14 +511,27 @@ export class DependencyPlanner extends Context.Service<
         }
 
         return {
+          alreadyDirectSkills: requestedSkills
+            .map((requestedSkill) => requestedSkill.skillName)
+            .filter((skillName) => {
+              const existingLockEntry = currentLockfile.skills[skillName];
+
+              return existingLockEntry !== undefined && existingLockEntry.implicit !== true;
+            }),
           dependencySkillsInstalled: orderedNewSkills
-            .filter((step) => step.skill.skillName !== requestedSkill.skillName)
-            .map((step) => step.skill.skillName),
+            .map((step) => step.skill.skillName)
+            .filter((skillName) => !requestedSkillNameSet.has(skillName)),
+          directSkillsInstalled: requestedSkills
+            .map((requestedSkill) => requestedSkill.skillName)
+            .filter((skillName) => {
+              const existingLockEntry = currentLockfile.skills[skillName];
+
+              return existingLockEntry === undefined || existingLockEntry.implicit === true;
+            }),
           nextLockfile: {
             skills: nextSkills,
             version: 1,
           },
-          requestedSkill,
           skillsToInstall: orderedNewSkills,
         };
       });

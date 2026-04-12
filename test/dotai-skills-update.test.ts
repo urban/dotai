@@ -57,12 +57,12 @@ describe("dotai skills update", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
         yield* workflows.install({
           global: false,
-          requestedSkillName: "gamma",
+          requestedSkillNames: ["gamma"],
           source: fixturePaths.sourceRoot,
         });
       }),
@@ -150,12 +150,12 @@ describe("dotai skills update", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
         yield* workflows.install({
           global: false,
-          requestedSkillName: "gamma",
+          requestedSkillNames: ["gamma"],
           source: fixturePaths.sourceRoot,
         });
       }),
@@ -265,12 +265,12 @@ describe("dotai skills update", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
         yield* workflows.install({
           global: false,
-          requestedSkillName: "gamma",
+          requestedSkillNames: ["gamma"],
           source: fixturePaths.sourceRoot,
         });
       }),
@@ -361,7 +361,7 @@ describe("dotai skills update", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
       }),
@@ -435,7 +435,7 @@ describe("dotai skills update", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
       }),
@@ -540,7 +540,7 @@ describe("dotai skills update", () => {
 
         yield* workflows.install({
           global: false,
-          requestedSkillName: "alpha",
+          requestedSkillNames: ["alpha"],
           source: fixturePaths.sourceRoot,
         });
       }),
