@@ -1,5 +1,9 @@
 {
   "name": "@urban/dotai",
+  "version": "0.0.0",
+  "bin": {
+    "dotai": "./src/cli/main.ts"
+  },
   "files": [
     "src/**/*.ts"
   ],
@@ -19,6 +23,7 @@
     "@changesets/cli": "2.30.0",
     "@effect/language-service": "^0.84.0",
     "@effect/vitest": "4.0.0-beta.46",
+    "@types/node": "^25.6.0",
     "effect": "4.0.0-beta.46",
     "husky": "9.1.7",
     "lint-staged": "16.4.0",
