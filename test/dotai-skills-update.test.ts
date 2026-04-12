@@ -13,14 +13,16 @@ import {
   SkillWorkflows,
 } from "../src/index";
 import { LockfileWriteError, MutationExecutionError } from "../src/dotai/domain";
+import * as BunServices from "@effect/platform-bun/BunServices";
+
 import {
+  bunCliTestLayer,
   makeDotaiFixturePaths,
   makeDotaiTestLayer,
   makePromptTerminalLayer,
   promptInput,
   writeSkillFixture,
 } from "./dotai-test-kit";
-import * as BunServices from "../src/platform/BunServices";
 
 describe("dotai skills update", () => {
   it("refreshes all direct installs from recorded provenance and updates affected dependencies", async () => {
@@ -252,8 +254,7 @@ describe("dotai skills update", () => {
 
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
-        BunServices.coreLayer,
-        BunServices.stdioLayer,
+        bunCliTestLayer,
         makeDotaiTestLayer(fixturePaths),
         makePromptTerminalLayer([promptInput.down(), promptInput.enter()], terminalOutput),
       ),

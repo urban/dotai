@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Cause, Effect, Layer, Option, Queue, Terminal } from "effect";
+import * as BunChildProcessSpawner from "@effect/platform-bun/BunChildProcessSpawner";
+import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
+import * as BunPath from "@effect/platform-bun/BunPath";
+import { Cause, Effect, Layer, Option, Queue, Stdio, Terminal } from "effect";
 
 import { makeMainLayer, RuntimeDirectories } from "../src/index";
-import * as BunServices from "../src/platform/BunServices";
 
 export type DotaiFixturePaths = ReturnType<typeof makeDotaiFixturePaths>;
 
@@ -42,6 +44,12 @@ export const makeDotaiFixturePaths = (prefix: string) => {
   };
 };
 
+export const bunCoreLayer = BunChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)),
+);
+
+export const bunCliTestLayer = Layer.mergeAll(bunCoreLayer, Stdio.layerTest({}));
+
 export const makeDotaiTestLayer = (
   paths: {
     readonly homeRoot: string;
@@ -55,7 +63,7 @@ export const makeDotaiTestLayer = (
       homeDirectory: paths.homeRoot,
     }),
     options,
-  ).pipe(Layer.provide(BunServices.coreLayer));
+  ).pipe(Layer.provide(bunCoreLayer));
 
 const makeUserInput = (options: {
   readonly keyName: string;

@@ -14,14 +14,16 @@ import {
 } from "../src/index";
 import type { DotaiLockfile, ResolvedTarget } from "../src/dotai/domain";
 import { LockfileWriteError, MutationExecutionError } from "../src/dotai/domain";
+import * as BunServices from "@effect/platform-bun/BunServices";
+
 import {
+  bunCliTestLayer,
   makeDotaiFixturePaths,
   makeDotaiTestLayer,
   makePromptTerminalLayer,
   promptInput,
   writeSkillFixture,
 } from "./dotai-test-kit";
-import * as BunServices from "../src/platform/BunServices";
 
 describe("dotai skills uninstall", () => {
   it("blocks uninstall when installed dependents still require the skill and preserves bytes on disk", async () => {
@@ -189,8 +191,7 @@ describe("dotai skills uninstall", () => {
 
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
-        BunServices.coreLayer,
-        BunServices.stdioLayer,
+        bunCliTestLayer,
         makeDotaiTestLayer(fixturePaths),
         makePromptTerminalLayer([promptInput.enter()], terminalOutput),
       ),

@@ -13,7 +13,10 @@ import {
 } from "../src/index";
 import type { DotaiLockfile } from "../src/dotai/domain";
 import { LockfileWriteError } from "../src/dotai/domain";
+import * as BunServices from "@effect/platform-bun/BunServices";
+
 import {
+  bunCliTestLayer,
   createBareGitSkillSource,
   makeDotaiFixturePaths,
   makeDotaiTestLayer,
@@ -21,7 +24,6 @@ import {
   promptInput,
   writeSkillFixture,
 } from "./dotai-test-kit";
-import * as BunServices from "../src/platform/BunServices";
 
 const renderUnexpectedInstallFailure = (error: { readonly reason: { readonly message: string } }) =>
   error.reason.message;
@@ -550,8 +552,7 @@ describe("dotai skills install", () => {
 
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
-        BunServices.coreLayer,
-        BunServices.stdioLayer,
+        bunCliTestLayer,
         makeDotaiTestLayer(fixturePaths),
         makePromptTerminalLayer([promptInput.space(), promptInput.enter()], terminalOutput),
       ),
@@ -618,8 +619,7 @@ describe("dotai skills install", () => {
 
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
-        BunServices.coreLayer,
-        BunServices.stdioLayer,
+        bunCliTestLayer,
         makeDotaiTestLayer(fixturePaths),
         makePromptTerminalLayer([promptInput.space(), promptInput.enter()], terminalOutput),
       ),

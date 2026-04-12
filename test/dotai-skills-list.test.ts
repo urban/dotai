@@ -18,7 +18,7 @@ import {
   writeInstalledSkillFixture,
   writeSkillFixture,
 } from "./dotai-test-kit";
-import * as BunServices from "../src/platform/BunServices";
+import * as BunServices from "@effect/platform-bun/BunServices";
 
 describe("dotai skills list", () => {
   const listFixture = makeDotaiFixturePaths("dotai-skills-list-layer-");
