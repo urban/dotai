@@ -33,8 +33,8 @@ interface RenderTargetContext {
 }
 
 interface FailureContext {
-  readonly source?: string;
-  readonly target?: RenderTargetContext;
+  readonly source?: string | undefined;
+  readonly target?: RenderTargetContext | undefined;
 }
 
 interface RenderSection {

@@ -123,6 +123,9 @@ const promptForInstalledSkill = (action: "uninstall" | "update", global: boolean
     }),
   );
 
+const formatActionLabel = (action: "install" | "uninstall" | "update"): string =>
+  `${action.slice(0, 1).toUpperCase()}${action.slice(1)}`;
+
 const renderSelectionCancelled = (
   action: "install" | "uninstall" | "update",
   target: {
@@ -132,7 +135,7 @@ const renderSelectionCancelled = (
   },
   source?: string,
 ): string =>
-  renderNoMutationNoop(`${action[0].toUpperCase()}${action.slice(1)} selection was cancelled.`, {
+  renderNoMutationNoop(`${formatActionLabel(action)} selection was cancelled.`, {
     lockfilePath: target.lockfilePath,
     source,
     target,

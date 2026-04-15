@@ -235,7 +235,7 @@ export class InvalidSourceLocatorError extends Schema.TaggedErrorClass<InvalidSo
     source: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class SourceMaterializationFailedError extends Schema.TaggedErrorClass<SourceMaterializationFailedError>()(
@@ -245,7 +245,7 @@ export class SourceMaterializationFailedError extends Schema.TaggedErrorClass<So
     source: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class DiscoveryRootNotFoundError extends Schema.TaggedErrorClass<DiscoveryRootNotFoundError>()(
@@ -255,7 +255,7 @@ export class DiscoveryRootNotFoundError extends Schema.TaggedErrorClass<Discover
     source: Schema.optional(Schema.String),
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class SkillManifestInvalidError extends Schema.TaggedErrorClass<SkillManifestInvalidError>()(
@@ -266,7 +266,7 @@ export class SkillManifestInvalidError extends Schema.TaggedErrorClass<SkillMani
     source: Schema.optional(Schema.String),
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class RequestedSkillNotFoundError extends Schema.TaggedErrorClass<RequestedSkillNotFoundError>()(
@@ -276,7 +276,7 @@ export class RequestedSkillNotFoundError extends Schema.TaggedErrorClass<Request
     source: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class DependencySkillNotFoundError extends Schema.TaggedErrorClass<DependencySkillNotFoundError>()(
@@ -287,7 +287,7 @@ export class DependencySkillNotFoundError extends Schema.TaggedErrorClass<Depend
     source: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class DependencySourceResolutionError extends Schema.TaggedErrorClass<DependencySourceResolutionError>()(
@@ -298,7 +298,7 @@ export class DependencySourceResolutionError extends Schema.TaggedErrorClass<Dep
     requiredBy: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class DependencyCycleDetectedError extends Schema.TaggedErrorClass<DependencyCycleDetectedError>()(
@@ -307,7 +307,7 @@ export class DependencyCycleDetectedError extends Schema.TaggedErrorClass<Depend
     cyclePath: Schema.Array(Schema.String),
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export interface LockEntry {
@@ -328,7 +328,7 @@ export class LockfileParseError extends Schema.TaggedErrorClass<LockfileParseErr
     reason: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class LockfileWriteError extends Schema.TaggedErrorClass<LockfileWriteError>()(
@@ -338,7 +338,7 @@ export class LockfileWriteError extends Schema.TaggedErrorClass<LockfileWriteErr
     reason: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class MutationExecutionError extends Schema.TaggedErrorClass<MutationExecutionError>()(
@@ -348,7 +348,7 @@ export class MutationExecutionError extends Schema.TaggedErrorClass<MutationExec
     reason: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class UninstallRollbackError extends Schema.TaggedErrorClass<UninstallRollbackError>()(
@@ -358,7 +358,7 @@ export class UninstallRollbackError extends Schema.TaggedErrorClass<UninstallRol
     reason: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class UpdateMutationRollbackError extends Schema.TaggedErrorClass<UpdateMutationRollbackError>()(
@@ -368,7 +368,7 @@ export class UpdateMutationRollbackError extends Schema.TaggedErrorClass<UpdateM
     reason: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class UpdateLockfileRollbackError extends Schema.TaggedErrorClass<UpdateLockfileRollbackError>()(
@@ -378,7 +378,7 @@ export class UpdateLockfileRollbackError extends Schema.TaggedErrorClass<UpdateL
     reason: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class UpdateProvenanceNotFoundError extends Schema.TaggedErrorClass<UpdateProvenanceNotFoundError>()(
@@ -388,7 +388,7 @@ export class UpdateProvenanceNotFoundError extends Schema.TaggedErrorClass<Updat
     skillName: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }
 
 export class UpdateSourceRefreshError extends Schema.TaggedErrorClass<UpdateSourceRefreshError>()(
@@ -399,5 +399,5 @@ export class UpdateSourceRefreshError extends Schema.TaggedErrorClass<UpdateSour
     source: Schema.String,
   },
 ) {
-  readonly [Runtime.errorExitCode] = 1;
+  override readonly [Runtime.errorExitCode] = 1;
 }

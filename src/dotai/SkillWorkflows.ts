@@ -371,10 +371,10 @@ export class SkillWorkflows extends Context.Service<
                 );
 
                 if (error._tag === "LockfileWriteError") {
-                  return yield* Effect.fail(toUninstallRollbackError(error));
+                  return yield* toUninstallRollbackError(error);
                 }
 
-                return yield* Effect.fail(error);
+                return yield* error;
               });
 
             yield* mutationExecutor.stageSkillRemoval(target, uninstallPlan.requestedSkillName);
@@ -445,7 +445,9 @@ export class SkillWorkflows extends Context.Service<
                 _tag: "UpdateWorkflowNoopResult",
                 lockfilePath: target.lockfilePath,
                 reason: updatePlan.reason,
-                requestedSkillName: input.requestedSkillName,
+                ...(input.requestedSkillName === undefined
+                  ? {}
+                  : { requestedSkillName: input.requestedSkillName }),
                 target,
               };
 
@@ -484,10 +486,10 @@ export class SkillWorkflows extends Context.Service<
                 yield* rollbackUpdatedSkills();
 
                 if (error._tag === "MutationExecutionError") {
-                  return yield* Effect.fail(toUpdateMutationRollbackError(error));
+                  return yield* toUpdateMutationRollbackError(error);
                 }
 
-                return yield* Effect.fail(error);
+                return yield* error;
               });
 
             const rollbackThenFailUpdateLockfile = (
@@ -500,10 +502,10 @@ export class SkillWorkflows extends Context.Service<
                 yield* rollbackUpdatedSkills();
 
                 if (error._tag === "LockfileWriteError") {
-                  return yield* Effect.fail(toUpdateLockfileRollbackError(error));
+                  return yield* toUpdateLockfileRollbackError(error);
                 }
 
-                return yield* Effect.fail(error);
+                return yield* error;
               });
 
             yield* Effect.forEach(

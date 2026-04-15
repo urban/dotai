@@ -24,15 +24,11 @@ const normalizeRef = (value: string): string | undefined => {
 
 const trimTrailingSlash = (value: string): string => value.replace(/\/+$/u, "");
 
-const makeGitSource = (options: {
-  readonly URL: string;
-  readonly ref?: string;
-  readonly subpath?: string;
-}): GitSource => ({
-  URL: options.URL,
+const makeGitSource = (URL: string, ref?: string, subpath?: string): GitSource => ({
+  URL,
   _tag: "GitSource",
-  ...(options.ref === undefined ? {} : { ref: options.ref }),
-  ...(options.subpath === undefined ? {} : { subpath: options.subpath }),
+  ...(ref === undefined ? {} : { ref }),
+  ...(subpath === undefined ? {} : { subpath }),
 });
 
 const isSupportedRemoteUrl = (source: string): boolean => {
@@ -68,10 +64,7 @@ const normalizeGitUrl = (source: string): GitSource => {
     const repository = hashIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, hashIndex);
     const ref = hashIndex === -1 ? undefined : normalizeRef(withoutPrefix.slice(hashIndex + 1));
 
-    return makeGitSource({
-      URL: `https://github.com/${repository}.git`,
-      ref,
-    });
+    return makeGitSource(`https://github.com/${repository}.git`, ref);
   }
 
   if (source.startsWith("gitlab:")) {
@@ -80,54 +73,52 @@ const normalizeGitUrl = (source: string): GitSource => {
     const repository = hashIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, hashIndex);
     const ref = hashIndex === -1 ? undefined : normalizeRef(withoutPrefix.slice(hashIndex + 1));
 
-    return makeGitSource({
-      URL: `https://gitlab.com/${repository}.git`,
-      ref,
-    });
+    return makeGitSource(`https://gitlab.com/${repository}.git`, ref);
   }
 
   if (source.startsWith("git@")) {
-    return makeGitSource({
-      URL: source,
-    });
+    return makeGitSource(source);
   }
 
   const parsed = URL.canParse(source) ? new URL(source) : undefined;
 
   if (parsed === undefined) {
-    return makeGitSource({
-      URL: source,
-    });
+    return makeGitSource(source);
   }
 
   if (parsed.hostname === "github.com") {
     const parts = parsed.pathname.split("/").filter((part) => part.length > 0);
 
     if (parts.length >= 4 && parts[2] === "tree") {
-      const [owner, repository, , ref, ...subpathParts] = parts;
+      const owner = parts[0];
+      const repository = parts[1];
+      const ref = parts[3];
+      const subpathParts = parts.slice(4);
 
-      return makeGitSource({
-        URL: `https://github.com/${owner}/${repository}.git`,
-        ref,
-        subpath: subpathParts.length === 0 ? undefined : subpathParts.join("/"),
-      });
+      if (owner !== undefined && repository !== undefined && ref !== undefined) {
+        return makeGitSource(
+          `https://github.com/${owner}/${repository}.git`,
+          ref,
+          subpathParts.length === 0 ? undefined : subpathParts.join("/"),
+        );
+      }
     }
 
     if (parts.length >= 2) {
-      const [owner, repository] = parts;
+      const owner = parts[0];
+      const repository = parts[1];
       const hashRef = normalizeRef(parsed.hash.replace(/^#/u, ""));
 
-      return makeGitSource({
-        URL: `https://github.com/${owner}/${trimTrailingSlash(repository).replace(/\.git$/u, "")}.git`,
-        ref: hashRef,
-      });
+      if (owner !== undefined && repository !== undefined) {
+        return makeGitSource(
+          `https://github.com/${owner}/${trimTrailingSlash(repository).replace(/\.git$/u, "")}.git`,
+          hashRef,
+        );
+      }
     }
   }
 
-  return makeGitSource({
-    URL: source,
-    ref: normalizeRef(parsed.hash.replace(/^#/u, "")),
-  });
+  return makeGitSource(source, normalizeRef(parsed.hash.replace(/^#/u, "")));
 };
 
 const isGitSourceLocator = (source: string): boolean =>
