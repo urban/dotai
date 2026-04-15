@@ -32,14 +32,29 @@ metadata:
 
 ## CLI
 
-In a repo checkout:
+`dotai` runs on Bun. In a repo checkout:
 
 ```sh
 bun install
+bun run cli -- --help
+```
+
+You can also invoke the entrypoint directly:
+
+```sh
 bun run src/cli/main.ts --help
 ```
 
 When installed as a package, the binary name is `dotai`.
+
+For local PATH testing with Bun's global link:
+
+```sh
+bun link
+dotai --help
+```
+
+`bun link` creates a linked `dotai` binary that points at the CLI entrypoint. If `dotai --help` fails while `bun run cli -- --help` works, verify that Bun is installed and available on your `PATH`.
 
 Examples:
 
@@ -77,3 +92,8 @@ Git must be available for git-backed sources.
 bun install
 bun run check
 ```
+
+Runtime notes:
+
+- the linked `dotai` CLI expects Bun at runtime
+- `node` remains part of the tooling contract for this repository, but the CLI entrypoint itself is Bun-based

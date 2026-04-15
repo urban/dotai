@@ -269,18 +269,17 @@ export class SourceWorkspace extends Context.Service<
           });
         }
 
-        const normalizedPath = yield* fileSystem.realPath(localSourcePath);
         const normalizedSource: LocalSource = {
           _tag: "LocalSource",
-          filepath: normalizedPath,
+          filepath: localSourcePath,
         };
 
         return {
           normalizedSource,
-          namespacePath: normalizedPath,
-          selectionPath: normalizedPath,
+          namespacePath: localSourcePath,
+          selectionPath: localSourcePath,
           sourceLocator: source,
-          workspacePath: normalizedPath,
+          workspacePath: localSourcePath,
         } satisfies StagedSource;
       });
 

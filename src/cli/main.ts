@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { Command } from "effect/unstable/cli";
